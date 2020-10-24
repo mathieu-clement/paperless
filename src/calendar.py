@@ -46,6 +46,8 @@ class Calendar:
         event.add('dtend', schedule.end_dt)
         event.add('summary', self.summary(schedule))
         event.add('categories', self.categories(schedule), encode=0)
+        # TODO consider using 'uri' property or whatever ends up in iCal in
+        # the URL field
         event.add('description','PaperlessFBO: https://{}/'
                                 .format(self.fbo_url))
         event.add('location', self.fbo_address)
