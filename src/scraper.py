@@ -4,8 +4,9 @@
 from bs4 import BeautifulSoup
 import configparser
 import datetime
-import pickle
 import pdb
+import pickle
+import pytz
 import requests
 
 from . import absolute_filename, Schedule
@@ -39,13 +40,21 @@ class Scraper:
     DT_FORMAT = '%m/%d/%Y %I:%M:%S %p'
 
 
-    def __init__(self, base_url=None, username=None, password=None):
+    def __init__(self, base_url=None, username=None, password=None, 
+                       timezone=None):
         if not base_url or not username or not password:
             assert not base_url and not username and not password, \
                 'if one credential missing then all should be missing'
-            base_url, username, password = self.settings()
+            settings = self.Settings()
+            base_url = settings.base_url
+            username = settings.username
+            password = settings.password
+            if settings.timezone:
+                timezone = settings.timezone
         self.username = username
         self.password = password
+        if timezone:
+            self.timezone = pytz.timezone(timezone) 
         self.urls = self.Urls(base_url)
         self.cookie_manager = CookieManager(absolute_filename('cookies.bin'))
 
@@ -100,29 +109,40 @@ class Scraper:
         for tr in soup.select('#ctl00_ContentPlaceHolder1_GridView1')[0]\
                       .contents[2:-1]:
             s = Schedule()
-            s.id = tr.contents[2].text
-            s.tail_number = 'N' + tr.contents[3].text
-            s.start_dt = datetime.datetime.strptime(
-                    tr.contents[4].text, self.DT_FORMAT) 
-            s.end_dt   = datetime.datetime.strptime(
-                    tr.contents[5].text, self.DT_FORMAT)
-            s.pilot = tr.contents[6].text
-            s.cfi = tr.contents[7].text
-            note = tr.contents[8].text
+            c = lambda i : tr.contents[i].text
+            s.id = c(2)
+            s.tail_number = 'N' + c(3)
+            s.start_dt = self.parse_dt(c(4)) 
+            s.end_dt = self.parse_dt(c(5)) 
+            s.pilot = c(6)
+            s.cfi = c(7)
+            note = c(8)
             if note != '\xa0':
                 s.note = note
             schedules.append(s)
         return schedules
 
 
-    def settings(self):
-        config = configparser.ConfigParser()
-        settings_file_path = absolute_filename('settings.ini')
-        config.read(settings_file_path)
-        base_url = config['scraper']['url']
-        username = config['scraper']['username']
-        password = config['scraper']['password']
-        if not base_url or not username or not password:
-            raise ValueError('scraper settings not readable')
-        return base_url, username, password
+    def parse_dt(self, text):
+        naive = datetime.datetime.strptime(text, self.DT_FORMAT)
+        if self.timezone:
+            return self.timezone.localize(naive)
+        else:
+            return naive
+
+
+
+    class Settings:
+
+        def __init__(self):
+            config = configparser.ConfigParser()
+            settings_file_path = absolute_filename('settings.ini')
+            config.read(settings_file_path)
+            self.base_url = config['scraper']['url']
+            self.username = config['scraper']['username']
+            self.password = config['scraper']['password']
+            self.timezone = config['scraper']['timezone']
+            if not self.base_url or not self.username or not self.password:
+                raise ValueError('Mandatory scraper settings missing'
+                                 ' or unredable')
 

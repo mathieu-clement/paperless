@@ -4,7 +4,12 @@
 import src as paperless
 
 import datetime
+import pdb
+import pprint
+import pytz
 from unittest import TestCase
+
+pp = pprint.PrettyPrinter(indent=4)
 
 class TestScraper(TestCase):
     def assertIsNotNoneOrEmpty(self, value):
@@ -24,8 +29,10 @@ class TestScraper(TestCase):
         prev_pilot = schedules[0].pilot
 
         # Let's check that each schedule has valid data in it
-
+        
         for schedule in schedules:
+            pp.pprint(schedule)
+
             # String checks
             self.assertIsNotNoneOrEmpty(schedule.id)
             self.assertIsNotNoneOrEmpty(schedule.tail_number)
@@ -41,6 +48,9 @@ class TestScraper(TestCase):
             prev_pilot = schedule.pilot
 
             # Datetime checks
+            # Timezone is set
+            self.assertIsNotNone(schedule.start_dt.tzinfo)
+            self.assertIsNotNone(schedule.end_dt.tzinfo)
             # the flight is 4 hr or less
             four_hours = datetime.timedelta(hours = 4)
             schedule.end_dt <= schedule.start_dt + four_hours
