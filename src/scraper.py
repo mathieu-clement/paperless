@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 from bs4 import BeautifulSoup
+import configparser
 import datetime
 import pickle
 import pdb
@@ -38,7 +39,11 @@ class Scraper:
     DT_FORMAT = '%m/%d/%Y %I:%M:%S %p'
 
 
-    def __init__(self, base_url, username, password):
+    def __init__(self, base_url=None, username=None, password=None):
+        if not base_url or not username or not password:
+            assert not base_url and not username and not password, \
+                'if one credential missing then all should be missing'
+            base_url, username, password = self.settings()
         self.username = username
         self.password = password
         self.urls = self.Urls(base_url)
@@ -49,7 +54,7 @@ class Scraper:
         """Starts a new session, and performs login, whether the user is already
         connected or not.
         
-        Returns True if l;ogin was successful, False otherwise 
+        Returns True if login was successful, False otherwise 
         (maybe incorrect credentials)"""
         self.session = requests.Session()
         # Load an empty login page before login
@@ -108,4 +113,16 @@ class Scraper:
                 s.note = note
             schedules.append(s)
         return schedules
+
+
+    def settings(self):
+        config = configparser.ConfigParser()
+        settings_file_path = absolute_filename('settings.ini')
+        config.read(settings_file_path)
+        base_url = config['scraper']['url']
+        username = config['scraper']['username']
+        password = config['scraper']['password']
+        if not base_url or not username or not password:
+            raise ValueError('scraper settings not readable')
+        return base_url, username, password
 
