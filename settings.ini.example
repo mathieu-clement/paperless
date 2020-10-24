@@ -3,3 +3,8 @@ url = your_org.paperlessfbo.com
 username = your_username_without_quotes
 password = your_password_without_quotes
 timezone = America/Los_Angeles
+
+[calendar]
+principal_cfi = Smith, John
+fbo_url = your_org.paperlessfbo.com
+fbo_address = My FBO, 130 Maple St, Smalltown, XY 12345
