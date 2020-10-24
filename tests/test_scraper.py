@@ -4,7 +4,6 @@
 import src as paperless
 
 import datetime
-import re
 from unittest import TestCase
 
 class TestScraper(TestCase):
@@ -13,7 +12,7 @@ class TestScraper(TestCase):
         self.assertNotEqual(value, '')
 
     def assertIsPersonName(self, value):
-        self.assertIsNotNone(re.match('^[A-Z][a-z]+, [A-Z][a-z]+$', value))
+        self.assertRegex(value, '^[A-Z][a-z]+, [A-Z][a-z]+$')
 
     def test_my_schedules(self):
         schedules = paperless.Scraper().my_schedules()
