@@ -34,6 +34,8 @@ __maintainer__ = 'Mathieu Clement'
 __email__ = 'tiktaktok@users.noreply.github.com'
 __status__ = ''
 
-from .core import absolute_filename
+from .core import absolute_filename # Must be first to avoid cyclic dependency
+
+from .calendar import Calendar
 from .schedule import Schedule
 from .scraper import Scraper
