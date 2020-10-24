@@ -1,0 +1,4 @@
+[scraper]
+url = your_org.paperlessfbo.com
+username = your_username_without_quotes
+password = your_password_without_quotes
