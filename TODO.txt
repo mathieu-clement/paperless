@@ -1,0 +1,5 @@
+# TODOs
+
+  - Link in calendar to check out aircraft
+  - Notification (and possibly change event start time) if aircraft is available
+    before intended scheduled time, e.g. to preflight and refuel
