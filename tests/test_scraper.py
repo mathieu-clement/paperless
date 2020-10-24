@@ -4,12 +4,16 @@
 import src as paperless
 
 import datetime
+import re
 from unittest import TestCase
 
 class TestScraper(TestCase):
     def assertIsNotNoneOrEmpty(self, value):
         self.assertIsNotNone(value)
         self.assertNotEqual(value, '')
+
+    def assertIsPersonName(self, value):
+        self.assertIsNotNone(re.match('^[A-Z][a-z]+, [A-Z][a-z]+$', value))
 
     def test_my_schedules(self):
         schedules = paperless.Scraper().my_schedules()
@@ -28,11 +32,13 @@ class TestScraper(TestCase):
             self.assertIsNotNoneOrEmpty(schedule.tail_number)
             assert schedule.tail_number.startswith('N') \
                    or schedule.tail_number == 'GROUND'
-            self.assertIsNotNoneOrEmpty(schedule.cfi)
-            self.assertIsNotNoneOrEmpty(schedule.pilot)
 
-            self.assertEqual(schedule.pilot, prev_pilot)
+            # Person names
+            self.assertIsPersonName(schedule.cfi)
+            self.assertIsPersonName(schedule.pilot)
+
             # Check pilot is always the same
+            self.assertEqual(schedule.pilot, prev_pilot)
             prev_pilot = schedule.pilot
 
             # Datetime checks
