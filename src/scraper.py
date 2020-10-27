@@ -126,7 +126,7 @@ class Scraper:
 
 
     def my_next_flight(self):
-        return self.my_schedules[0]
+        return self.my_schedules()[0]
 
 
     def aircraft_schedules(self, tail_number):
