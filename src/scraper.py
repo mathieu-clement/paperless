@@ -177,7 +177,7 @@ class Scraper:
 
     def is_aircraft_available_before_flight(self, flight, aircraft_schedules):
         for s in aircraft_schedules:
-            if s.pilot == flight.pilot:
+            if s.pilot == flight.pilot and s.start_dt == flight.start_dt:
                 # if we get to the given flight, then there were no flights 
                 # before that, and the airplane is available.
                 return True

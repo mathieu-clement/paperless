@@ -84,6 +84,7 @@ class TestScraper(TestCase):
             self.assertEqual(schedule.start_dt.tzinfo, schedule.end_dt.tzinfo)
 
 
+
     def assert_schedule_tail_number(self, schedule):
         self.assertIsNotNoneOrEmpty(schedule.tail_number)
         self.assertGreater(len(schedule.tail_number), 1)
@@ -112,6 +113,263 @@ class TestScraper(TestCase):
         self.assertLessEqual(end_hour, max_end_hour)
 
 
+class TestAircraftAvailable(TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.scraper = paperless.Scraper()
 
+
+    def available(self, pilot_schedules, aircraft_schedules):
+        return self.scraper.is_aircraft_available_before_flight(
+                pilot_schedules, aircraft_schedules)
+
+
+    def test_next_flight_not_found_should_raise(self):
+        pilot_schedules = [] 
+        acft_schedules = self.make_aircraft_schedules([
+            # pilot       tail_num  d  hr  m  hr  m
+            ['Smith, John', '9876', 6, 14, 0, 16, 0]
+            ])
+        with self.assertRaises(Exception):
+            self.available(pilot_schedules, acft_schedules)
+    
+
+    def test_aircraft_schedules_not_found_should_raise(self):
+        pilot_schedules = self.make_pilot_schedules([
+        #    d  hr  m  hr  m
+            ['9876', 5, 14, 0, 16, 0],
+            ['9876', 6, 14, 0, 16, 0],
+            ['9876', 8, 10, 0, 12, 0]
+            ], 'Smith, John')
+        acft_schedules = []
+        with self.assertRaises(Exception):
+            self.available(pilot_schedules, acft_schedules)
+
+    def test_next_flight_different_pilot_should_raise(self):
+        pilot_schedules = self.make_pilot_schedules([
+        #    d  hr  m  hr  m
+            ['9876', 5, 14, 0, 16, 0],
+            ['9876', 6, 14, 0, 16, 0],
+            ['9876', 8, 10, 0, 12, 0]
+            ], 'Smith, John')
+        acft_schedules = self.make_aircraft_schedules([
+            ['Attica, Mark', '9876', 5, 14, 0, 16, 0]])
+        with self.assertRaises(Exception):
+            self.available(pilot_schedules, acft_schedules)
+
+
+    def test_next_flight_different_time_same_pilot_should_raise(self):
+        pilot_schedules = self.make_pilot_schedules([
+        #    d  hr  m  hr  m
+            ['9876', 5, 14, 0, 16, 0],
+            ['9876', 6, 14, 0, 16, 0],
+            ['9876', 8, 10, 0, 12, 0]
+            ], 'Smith, John')
+        acft_schedules = self.make_aircraft_schedules([
+            ['Smith, John', '9876', 5, 15, 0, 16, 0]])
+        with self.assertRaises(Exception):
+            self.available(pilot_schedules, acft_schedules)
+
+
+    def test_next_flight_same_time_different_day_should_raise(self):
+        pilot_schedules = self.make_pilot_schedules([
+        #    d  hr  m  hr  m
+            ['9876', 5, 14, 0, 16, 0],
+            ['9876', 6, 14, 0, 16, 0],
+            ['9876', 8, 10, 0, 12, 0]
+            ], 'Smith, John')
+        acft_schedules = self.make_aircraft_schedules([
+            ['Smith, John', '9876', 6, 14, 0, 16, 0]])
+        with self.assertRaises(Exception):
+            self.available(pilot_schedules, acft_schedules)
+        acft_schedules = self.make_aircraft_schedules([
+            ['Smith, John', '9876', 4, 14, 0, 16, 0]])
+        with self.assertRaises(Exception):
+            self.available(pilot_schedules, acft_schedules)
+
+
+    def test_airplane_free_less_than_15_minutes_before_is_not_available(self):
+        pilot_schedules = self.make_pilot_schedules([
+        #    d  hr  m  hr  m
+            ['9876', 5, 14, 0, 16, 0],
+            ['9876', 6, 14, 0, 16, 0],
+            ['9876', 8, 10, 0, 12, 0]
+            ], 'Smith, John')
+        acft_schedules = self.make_aircraft_schedules([
+            ['Karuak, Justine', '9876', 5, 10, 0, 13, 50],
+            ['Smith, John',     '9876', 5, 14, 0, 16, 0]
+            ])
+        self.assertFalse(self.available(pilot_schedules, acft_schedules))
+
+
+    def test_airplane_free_exactly_15_minutes_before_is_available(self):
+        pilot_schedules = self.make_pilot_schedules([
+        #    d  hr  m  hr  m
+            ['9876', 5, 14, 0, 16, 0],
+            ['9876', 6, 14, 0, 16, 0],
+            ['9876', 8, 10, 0, 12, 0]
+            ], 'Smith, John')
+        acft_schedules = self.make_aircraft_schedules([
+            ['Karuak, Justine', '9876', 5, 10, 0, 13, 45],
+            ['Smith, John',     '9876', 5, 14, 0, 16, 0]
+            ])
+        self.assertTrue(self.available(pilot_schedules, acft_schedules))
+    
+
+    def test_airplane_free_exactly_15_minutes_before_is_available_min_30(self):
+        pilot_schedules = self.make_pilot_schedules([
+        #    d  hr  m  hr  m
+            ['9876', 5, 14, 30, 16, 0],
+            ['9876', 6, 14, 0, 16, 0],
+            ['9876', 8, 10, 0, 12, 0]
+            ], 'Smith, John')
+        acft_schedules = self.make_aircraft_schedules([
+            ['Karuak, Justine', '9876', 5, 10, 0, 14, 0],
+            ['Smith, John',     '9876', 5, 14, 30, 16, 0]
+            ])
+        self.assertTrue(self.available(pilot_schedules, acft_schedules))
+    
+
+    def test_airplane_free_exactly_15_minutes_before_next_day_is_available(self):
+        pilot_schedules = self.make_pilot_schedules([
+        #    d  hr  m  hr  m
+            ['9876', 6, 14, 0, 16, 0],
+            ['9876', 8, 10, 0, 12, 0]
+            ], 'Smith, John')
+        acft_schedules = self.make_aircraft_schedules([
+            ['Karuak, Justine', '9876', 5, 10, 0, 13, 45],
+            ['Karuak, Justine', '9876', 6, 10, 0, 13, 45],
+            ['Smith, John',     '9876', 6, 14, 0, 16, 0]
+            ])
+        self.assertTrue(self.available(pilot_schedules, acft_schedules))
+    
+
+    def test_airplane_free_more_than_15_minutes_before_is_available(self):
+        pilot_schedules = self.make_pilot_schedules([
+        #    d  hr  m  hr  m
+            ['9876', 5, 14, 0, 16, 0],
+            ['9876', 6, 14, 0, 16, 0],
+            ['9876', 8, 10, 0, 12, 0]
+            ], 'Smith, John')
+        acft_schedules = self.make_aircraft_schedules([
+            ['Karuak, Justine', '9876', 5, 10, 0, 13, 44],
+            ['Smith, John',     '9876', 5, 14, 0, 16, 0]
+            ])
+        self.assertTrue(self.available(pilot_schedules, acft_schedules))
+    
+
+    def test_first_acft_flight_is_pilot_flight(self):
+        pilot_schedules = self.make_pilot_schedules([
+        #    d  hr  m  hr  m
+            ['9876', 5, 14, 0, 16, 0],
+            ['9876', 6, 14, 0, 16, 0],
+            ['9876', 8, 10, 0, 12, 0]
+            ], 'Smith, John')
+        acft_schedules = self.make_aircraft_schedules([
+            ['Smith, John', '9876', 5, 14, 0, 16, 0],
+            ['Smith, Kirk', '9876', 5, 16, 0, 19, 0]
+            ])
+        self.assertTrue(self.available(pilot_schedules, acft_schedules))
+    
+
+    def test_second_acft_flight_is_pilot_flight_at_same_time(self):
+        pilot_schedules = self.make_pilot_schedules([
+        #    d  hr  m  hr  m
+            ['9876', 5, 14, 0, 16, 0],
+            ['9876', 6, 14, 0, 16, 0],
+            ['9876', 8, 10, 0, 12, 0]
+            ], 'Smith, John')
+        acft_schedules = self.make_aircraft_schedules([
+            ['Smith, Kirk', '9876', 4, 14, 0, 16, 0],
+            ['Smith, Mark', '9876', 5, 13, 0, 13, 55],
+            ['Smith, John', '9876', 5, 14, 0, 16, 0],
+            ])
+        self.assertFalse(self.available(pilot_schedules, acft_schedules))
+
+
+    def test_tail_number_sanitation1(self):
+        pilot_schedules = self.make_pilot_schedules([
+        #    d  hr  m  hr  m
+            ['9876', 5, 14, 0, 16, 0]
+            ], 'Smith, John', '1234')
+        acft_schedules = self.make_aircraft_schedules([
+            ['Smith, John', 'N1234', 5, 14, 0, 16, 0]
+            ])
+        self.assertTrue(self.available(pilot_schedules, acft_schedules))
+
+    
+    def test_tail_number_sanitation2(self):
+        pilot_schedules = self.make_pilot_schedules([
+        #    d  hr  m  hr  m
+            ['9876', 5, 14, 0, 16, 0]
+            ], 'Smith, John', 'N1234')
+        acft_schedules = self.make_aircraft_schedules([
+            ['Smith, John', '1234', 5, 14, 0, 16, 0]
+            ])
+        self.assertTrue(self.available(pilot_schedules, acft_schedules))
+
+    
+    def make_aircraft_schedules(self, times):
+        # times is [ [pilot, tail_number, day, 
+        # start_hour, start_minute, end_hour, end_minute]... ]
+        # see below
+        schedules = []
+        tz = pytz.timezone('America/Los_Angeles')
+
+        counter = 1
+        for t in times:
+            pilot = t[0]
+            tail_number = t[1]
+            day = t[2]
+            start_hour = t[3]
+            start_minute = t[4]
+            end_hour = t[5]
+            end_minute = t[6]
+
+            s = paperless.Schedule()
+            s.id = str(counter)
+            counter = counter + 1
+            s.tail_number = tail_number
+            s.start_dt = tz.localize(datetime.datetime(
+                1991, 11, day, start_hour, start_minute))
+            s.end_dt = tz.localize(datetime.datetime(
+                1991, 11, day, end_hour, end_minute))
+            s.pilot = pilot 
+            s.cfi = 'Stewart, Michael'
+            schedules.append(s)
+
+        return schedules
+
+
+    def make_pilot_schedules(self, times, pilot='Smith, John', 
+                             tail_number='9876'):
+        # times is [ [tail_number, day, 
+        # start_hour, start_minute, end_hour, end_minute]... ]
+        # see below
+        schedules = []
+        tz = pytz.timezone('America/Los_Angeles')
+
+        counter = 1
+        for t in times:
+            tail_number = t[0]
+            day = t[1]
+            start_hour = t[2]
+            start_minute = t[3]
+            end_hour = t[4]
+            end_minute = t[5]
+
+            s = paperless.Schedule()
+            s.id = str(counter)
+            counter = counter + 1
+            s.tail_number = tail_number
+            s.start_dt = tz.localize(datetime.datetime(
+                1991, 11, day, start_hour, start_minute))
+            s.end_dt = tz.localize(datetime.datetime(
+                1991, 11, day, end_hour, end_minute))
+            s.pilot = pilot
+            s.cfi = 'Stewart, Michael'
+            schedules.append(s)
+
+        return schedules
 
 
