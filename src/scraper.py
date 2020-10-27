@@ -34,10 +34,12 @@ class Scraper:
             self.BASE_URL = 'https://' + domain
             self.LOGIN_PAGE = self.BASE_URL + '/fcms1.aspx'
             self.MY_SCHEDULES = self.BASE_URL + '/mstr8.aspx'
+            self.AIRCRAFT_SCHEDULES = self.BASE_URL = '/mstr7b.aspx'
 
 
     is_logged_in = False
-    DT_FORMAT = '%m/%d/%Y %I:%M:%S %p'
+    DT_FORMAT_12HR = '%m/%d/%Y %I:%M:%S %p'
+    DT_FORMAT_24HR = '%m/%d/%y %H:%M'
 
 
     def __init__(self, base_url=None, username=None, password=None, 
@@ -123,12 +125,90 @@ class Scraper:
         return schedules
 
 
-    def parse_dt(self, text):
-        naive = datetime.datetime.strptime(text, self.DT_FORMAT)
+    def my_next_flight(self):
+        return self.my_schedules[0]
+
+
+    def aircraft_schedules(self, tail_number):
+        """Returns all flights for the given tail number (with or without
+        N prefix), including flights from other students."""
+        tail_number = self.sanitize_tail_number(tail_number)
+        # TODO restore
+        #if not self.is_logged_in:
+        #    self.log_in()
+        #assert self.is_logged_in, "Could not log in"
+
+        # Fetch page "aircraft schedule" (same as clicking on resource in
+        # table header on the Resource schedules page)
+        #request = self.session.get('{}{}{}'.format(
+        #    self.urls.AIRCRAFT_SCHEDULES,
+        #    '?AC=', tail_number)
+        #soup = BeautifulSoup(request.text, BS_PARSER)
+        # TODO Use actual response as above
+        f = open('/Users/mc/dev/paperless/schedule_12234.html', 'r')
+        soup = BeautifulSoup(str(f.read()), BS_PARSER)
+
+        schedules = []
+        counter = 1
+        for tr in soup.select('#ctl00_ContentPlaceHolder1_GridView1')[0]\
+                      .contents[2:-1]:
+            s = Schedule()
+            c = lambda i : tr.contents[i].text
+            s.tail_number = 'N' + c(1)
+            s.id = 'ACFT_SCHED_{}_{}'.format(s.tail_number, counter)
+            counter = counter + 1
+            s.start_dt = self.parse_dt_24hr(c(2)) 
+            s.end_dt = self.parse_dt_24hr(c(3)) 
+            s.pilot = c(4)
+            s.cfi = c(5)
+            schedules.append(s)
+
+        f.close() # TODO remove
+
+        return schedules
+
+
+    def is_aircraft_available_before_my_next_flight(self):
+        next_flight = self.my_next_flight()
+        tail_number = next_flight.tail_number
+        schedules = self.aircraft_schedules(tail_number)
+        return self.is_aircraft_available_before_flight(next_flight, schedules)
+    
+
+    def is_aircraft_available_before_flight(self, flight, aircraft_schedules):
+        for s in aircraft_schedules:
+            if s.pilot == flight.pilot:
+                # if we get to the given flight, then there were no flights 
+                # before that, and the airplane is available.
+                return True
+            if s.end_dt == flight.start_dt:
+                # If a flight ends when the given flight starts, 
+                # then the airplane is not available.
+                return False
+        raise Exception('flight not found in aicraft schedule')
+
+
+    def parse_dt_12hr(self, text):
+        return self.parse_dt(text, self.DT_FORMAT_12HR)
+
+
+    def parse_dt_24hr(self, text):
+        return self.parse_dt(text, self.DT_FORMAT_24HR)
+    
+
+    def parse_dt(self, text, dt_format):
+        naive = datetime.datetime.strptime(text, dt_format)
         if self.timezone:
             return self.timezone.localize(naive)
         else:
             return naive
+
+    
+    def sanitize_tail_number(self, tail_number):
+        if tail_number.startswith('N'):
+            tail_number = tail_number[1:]
+        return tail_number
+
 
 
 
