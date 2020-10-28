@@ -66,7 +66,10 @@ class Scraper:
         connected or not.
         
         Returns True if login was successful, False otherwise 
-        (maybe incorrect credentials)"""
+        (maybe incorrect credentials).
+
+        This usually doesn't this to be called from outside the module as
+        fetch methods check the user is logged in before proceeding further."""
         self.session = requests.Session()
         # Load an empty login page before login
         # to fetch hidden inputs to use in the form data
@@ -108,17 +111,16 @@ class Scraper:
         soup = BeautifulSoup(request.text, BS_PARSER)
 
         schedules = []
-        for tr in soup.select('#ctl00_ContentPlaceHolder1_GridView1')[0]\
-                      .contents[2:-1]:
+        for tr in self.extract_table(soup):
             s = Schedule()
             c = lambda i : tr.contents[i].text
-            s.id = c(2)
-            s.tail_number = 'N' + c(3)
-            s.start_dt = self.parse_dt(c(4)) 
-            s.end_dt = self.parse_dt(c(5)) 
-            s.pilot = c(6)
-            s.cfi = c(7)
-            note = c(8)
+            s.id = tr[2]
+            s.tail_number = self.canonicalize_tail_number(tr[3])
+            s.start_dt = self.parse_dt(tr[4]) 
+            s.end_dt = self.parse_dt(tr[5]) 
+            s.pilot = tr[6]
+            s.cfi = tr[7]
+            note = tr[8]
             if note != '\xa0':
                 s.note = note
             schedules.append(s)
@@ -126,46 +128,51 @@ class Scraper:
 
 
     def my_next_flight(self):
+        """Returns the next flight for the logged in user. 
+        It is unknown whether the next flight might be ongoing."""
         return self.my_schedules()[0]
 
 
     def aircraft_schedules(self, tail_number):
         """Returns all flights for the given tail number (with or without
         N prefix), including flights from other students."""
-        tail_number = self.sanitize_tail_number(tail_number)
-        # TODO restore
-        #if not self.is_logged_in:
-        #    self.log_in()
-        #assert self.is_logged_in, "Could not log in"
+        tail_number = self.canonicalize_tail_number(tail_number)
+        if not self.is_logged_in:
+            self.log_in()
+        assert self.is_logged_in, "Could not log in"
 
         # Fetch page "aircraft schedule" (same as clicking on resource in
         # table header on the Resource schedules page)
-        #request = self.session.get('{}{}{}'.format(
-        #    self.urls.AIRCRAFT_SCHEDULES,
-        #    '?AC=', tail_number)
-        #soup = BeautifulSoup(request.text, BS_PARSER)
-        # TODO Use actual response as above
-        f = open('/Users/mc/dev/paperless/schedule_12234.html', 'r')
-        soup = BeautifulSoup(str(f.read()), BS_PARSER)
+        request = self.session.get('{}?AC={}'.format(
+            self.urls.AIRCRAFT_SCHEDULES, tail_number))
+        soup = BeautifulSoup(request.text, BS_PARSER)
 
         schedules = []
         counter = 1
-        for tr in soup.select('#ctl00_ContentPlaceHolder1_GridView1')[0]\
-                      .contents[2:-1]:
+        for tr in self.extract_table(soup):
             s = Schedule()
-            c = lambda i : tr.contents[i].text
-            s.tail_number = 'N' + c(1)
+            s.tail_number = self.canonicalize_tail_number(tr[1])
             s.id = 'ACFT_SCHED_{}_{}'.format(s.tail_number, counter)
             counter = counter + 1
-            s.start_dt = self.parse_dt_24hr(c(2)) 
-            s.end_dt = self.parse_dt_24hr(c(3)) 
-            s.pilot = c(4)
-            s.cfi = c(5)
+            s.start_dt = self.parse_dt_24hr(tr[2]) 
+            s.end_dt = self.parse_dt_24hr(tr[3]) 
+            s.pilot = tr[4]
+            s.cfi = tr[5]
             schedules.append(s)
 
-        f.close() # TODO remove
-
         return schedules
+
+
+    def extract_table(self, soup):
+        rows = []
+        # TODO replace with generator, i.e. 'yield'
+        for tr in soup.select('#ctl00_ContentPlaceHolder1_GridView1')[0]\
+                      .contents[2:-1]:
+            c = lambda i : tr.contents[i].text
+            # TODO replace with list comprehension
+            row = list(map(lambda x: x.text, tr.contents)) 
+            rows.append(row)
+        return rows
 
 
     def is_aircraft_available_before_my_next_flight(self):
@@ -175,16 +182,25 @@ class Scraper:
         return self.is_aircraft_available_before_flight(next_flight, schedules)
     
 
-    def is_aircraft_available_before_flight(self, flight, aircraft_schedules):
+    def is_aircraft_available_before_flight(self, flight, aircraft_schedules,
+                                            at_least_minutes=15):
+        at_least_timedelta = datetime.timedelta(minutes=at_least_minutes)
+
+        # We are making the assumption flights are sorted chronologically
+
         for s in aircraft_schedules:
-            if s.pilot == flight.pilot and s.start_dt == flight.start_dt:
+            # TODO consider equals() method on Schedule
+            if s.start_dt == flight.start_dt:
+                assert s.pilot == flight.pilot
                 # if we get to the given flight, then there were no flights 
                 # before that, and the airplane is available.
                 return True
-            if s.end_dt == flight.start_dt:
+            if flight.start_dt - s.end_dt < at_least_timedelta and \
+               (flight.start_dt - s.end_dt).total_seconds() >= 0:
                 # If a flight ends when the given flight starts, 
                 # then the airplane is not available.
                 return False
+
         raise Exception('flight not found in aicraft schedule')
 
 
@@ -204,7 +220,7 @@ class Scraper:
             return naive
 
     
-    def sanitize_tail_number(self, tail_number):
+    def canonicalize_tail_number(self, tail_number):
         if tail_number.startswith('N'):
             tail_number = tail_number[1:]
         return tail_number

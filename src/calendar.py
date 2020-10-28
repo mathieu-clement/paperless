@@ -55,7 +55,7 @@ class Calendar:
 
     def summary(self, schedule):
         if self.is_flight(schedule):
-            summary = 'Flight {}'.format(schedule.tail_number)
+            summary = 'Flight N{}'.format(schedule.tail_number)
             if schedule.cfi != self.principal_cfi:
                 summary = summary + ' ({})'.format(schedule.cfi)
         else:
