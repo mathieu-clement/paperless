@@ -34,7 +34,7 @@ class Scraper:
             self.BASE_URL = 'https://' + domain
             self.LOGIN_PAGE = self.BASE_URL + '/fcms1.aspx'
             self.MY_SCHEDULES = self.BASE_URL + '/mstr8.aspx'
-            self.AIRCRAFT_SCHEDULES = self.BASE_URL = '/mstr7b.aspx'
+            self.AIRCRAFT_SCHEDULES = self.BASE_URL + '/mstr7b.aspx'
 
 
     is_logged_in = False
@@ -111,18 +111,17 @@ class Scraper:
         soup = BeautifulSoup(request.text, BS_PARSER)
 
         schedules = []
-        for tr in self.extract_table(soup):
+        for tr in self.extract_table(soup, 2, 7):
             s = Schedule()
-            c = lambda i : tr.contents[i].text
-            s.id = tr[2]
-            s.tail_number = self.canonicalize_tail_number(tr[3])
-            s.start_dt = self.parse_dt(tr[4]) 
-            s.end_dt = self.parse_dt(tr[5]) 
-            s.pilot = tr[6]
-            s.cfi = tr[7]
-            note = tr[8]
-            if note != '\xa0':
-                s.note = note
+            s.id = tr[0]
+            s.tail_number = self.canonicalize_tail_number(tr[1])
+            s.start_dt = self.parse_dt_12hr(tr[2])
+            s.end_dt = self.parse_dt_12hr(tr[3])
+            s.pilot = tr[4]
+            s.cfi = tr[5]
+            # note = tr[6]
+            #if note != '\xa0':
+            #    s.note = note
             schedules.append(s)
         return schedules
 
@@ -149,28 +148,38 @@ class Scraper:
 
         schedules = []
         counter = 1
-        for tr in self.extract_table(soup):
+        for tr in self.extract_table(soup, 1, 4):
             s = Schedule()
-            s.tail_number = self.canonicalize_tail_number(tr[1])
+            s.tail_number = self.canonicalize_tail_number(tr[0])
             s.id = 'ACFT_SCHED_{}_{}'.format(s.tail_number, counter)
             counter = counter + 1
-            s.start_dt = self.parse_dt_24hr(tr[2]) 
-            s.end_dt = self.parse_dt_24hr(tr[3]) 
-            s.pilot = tr[4]
-            s.cfi = tr[5]
+            s.start_dt = self.parse_dt_24hr(tr[1]) 
+            s.end_dt = self.parse_dt_24hr(tr[2]) 
+            s.pilot = tr[3]
+            try:
+                s.cfi = tr[4]
+            except:
+                pass
             schedules.append(s)
 
         return schedules
 
 
-    def extract_table(self, soup):
+    def extract_table(self, soup, start_idx, end_idx):
         rows = []
         # TODO replace with generator, i.e. 'yield'
         for tr in soup.select('#ctl00_ContentPlaceHolder1_GridView1')[0]\
                       .contents[2:-1]:
-            c = lambda i : tr.contents[i].text
             # TODO replace with list comprehension
-            row = list(map(lambda x: x.text, tr.contents)) 
+            row = []
+            for c in tr.contents[start_idx:end_idx+1]:
+                v = None
+                if c is not None:
+                    try:
+                        v = c.text
+                    except:
+                        pass
+                row.append(v)
             rows.append(row)
         return rows
 
